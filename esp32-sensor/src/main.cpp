@@ -1,29 +1,51 @@
 #include <Arduino.h>
 #include <DHT.h>
+#include <WiFi.h>
+#include "wifi_secrets.h"
 
 // --- Configuration du capteur ---
-#define DHT_PIN  4        // la broche OUT du DHT22 est sur GPIO 4
-#define DHT_TYPE DHT22    // on précise le modèle (DHT22, pas DHT11)
+#define DHT_PIN 4      // la broche OUT du DHT22 est sur GPIO 4
+#define DHT_TYPE DHT22 // on précise le modèle (DHT22, pas DHT11)
 
-DHT dht(DHT_PIN, DHT_TYPE);   // on crée l'objet "dht" qui gère le capteur
+DHT dht(DHT_PIN, DHT_TYPE); // on crée l'objet "dht" qui gère le capteur
 
-void setup() {
+
+
+void setup()
+{
   Serial.begin(115200);
-  dht.begin();              // initialise le capteur
+  dht.begin(); // initialise le capteur
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.setSleep(false);
+
+  Serial.print("WiFi connecting");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.print("Use http://");
+  Serial.print(WiFi.localIP());
+  Serial.println(" to connect");
   Serial.println("Lecture du DHT22...");
 }
 
-void loop() {
+void loop()
+{
   // Le DHT22 est lent : on attend 2 secondes entre deux lectures
   delay(2000);
 
-  float humidite    = dht.readHumidity();      // lecture humidité (%)
-  float temperature = dht.readTemperature();   // lecture température (°C)
+  float humidite = dht.readHumidity();       // lecture humidité (%)
+  float temperature = dht.readTemperature(); // lecture température (°C)
 
   // Les premières lectures échouent parfois -> on vérifie avant d'utiliser
-  if (isnan(humidite) || isnan(temperature)) {
+  if (isnan(humidite) || isnan(temperature))
+  {
     Serial.println("Echec de lecture du capteur !");
-    return;   // on saute ce tour de boucle et on réessaie
+    return; // on saute ce tour de boucle et on réessaie
   }
 
   // Affichage

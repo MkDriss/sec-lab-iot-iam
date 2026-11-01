@@ -21,7 +21,7 @@ uci commit network # valider
 /etc/init.d/network reload
 ```
 
-On vient créer une nouvelle « pièce » réseau nommée iot, dont l’adresse de passerelle est 192.168.50.1.s
+On vient créer une nouvelle « pièce » réseau nommée iot, dont l’adresse de passerelle est 192.168.50.1.
 
 **Source(s):**
 - *https://openwrt.org/docs/guide-user/network/wifi/basic*
@@ -35,8 +35,8 @@ Sans ça, les objets qui rejoindront le réseau iot n’obtiendront pas d’adre
 ```sh
 uci set dhcp.iot=dhcp # definir une config dhcp
 uci set dhcp.iot.interface='iot' # rattacher la config a l'objet iot
-uci set dhcp.iot.start='100' # port de depart
-uci set dhcp.iot.limit='150'  # port de fin
+uci set dhcp.iot.start='100' # adresse de depart
+uci set dhcp.iot.limit='150'  # adresse de fin
 uci set dhcp.iot.leasetime='12h' # temps devalidite d'une ip
 uci commit dhcp # valider
 /etc/init.d/dnsmasq restart

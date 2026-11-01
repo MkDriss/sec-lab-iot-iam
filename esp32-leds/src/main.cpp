@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include "wifi_secrets.h"
 
-const char* ssid     = "IoT-Lab";
-const char* password = "LabIoT2026";
+const char* ssid     = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 
 const int greenLedPin = 26;
 const int redLedPin   = 25;
