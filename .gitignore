@@ -30,3 +30,5 @@ build/
 !.env.example
 *.pem
 *.key
+
+*/include/secrets.h

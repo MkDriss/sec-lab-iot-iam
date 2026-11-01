@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <DHT.h>
 #include <WiFi.h>
-#include "wifi_secrets.h"
+#include "secrets.h"
 
 // --- Configuration du capteur ---
 #define DHT_PIN 4      // la broche OUT du DHT22 est sur GPIO 4

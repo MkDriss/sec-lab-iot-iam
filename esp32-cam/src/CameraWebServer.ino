@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "esp_camera.h"
 #include <WiFi.h>
-#include "wifi_secrets.h"
+#include "secrets.h"
 
 // ===========================
 // Select camera model in board_config.h
