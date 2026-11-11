@@ -1,0 +1,83 @@
+# LAB-STORY — MITM sur MQTT (interception & altération)
+
+> Volet offensif du projet `sec-lab-iot`. Attaque menée **uniquement** sur mon
+> propre laboratoire isolé, dont je suis propriétaire, à des fins pédagogiques.
+
+---
+
+## 1. Nom & rôle
+
+**MITM MQTT** — attaque homme-du-milieu qui place l'attaquant entre les objets ESP32 et le broker Mosquitto pour **intercepter puis altérer en direct** le trafic MQTT en clair du réseau IoT.
+
+## 2. Place dans le récit
+
+Phase **offensive** du lab. Elle vient **après** l'entrée sur le réseau (attaque WiFi) et l'exploitation des vulnérabilités unitaires (reverse Ghidra, scanner `rmap`, sniffer `rnifler`), et **avant** le fuzzer MQTT puis le basculement défensif (IDS maison, mois 4) et la remédiation IAM/zero-trust (mois 5). Elle **réutilise le sniffer défensif `rnifler`** (codé en Rust pour le volet défensif) côté offensif, illustrant qu'un même outil de visibilité change de camp selon la position réseau.
+
+## 3. Vulnérabilité ciblée
+
+- **MQTT en clair** (port 1883, sans TLS) : tout le trafic est lisible et modifiable par un tiers en position d'interception.
+- **Broker sans authentification** : n'importe quel client du réseau peut publier ou s'abonner.
+- **Absence d'authenticité et d'intégrité des messages** : ni le capteur, ni le broker, ni l'actionneur ne peut vérifier l'origine ou l'intégrité d'un message reçu.
+
+**OWASP IoT Top 10 (2018)** : **I7 — Insecure Data Transfer and Storage** (chiffrement en transit absent) ; **I2 — Insecure Network Services** (broker exposé sans authentification).
+
+## 4. Ce que j'ai fait
+
+Attaque construite en quatre temps, chaque outil codé à la main, une étape validée avant la suivante.
+
+**a. Positionnement — ARP spoofing (Python / scapy, `spoof.py`).**
+Empoisonnement **bidirectionnel** des caches ARP de l'objet et du broker (chacun croit que la MAC de l'attaquant est celle de l'autre), couplé à l'**IP forwarding** pour rester transparent et ne pas couper la communication. Scapy a été choisi pour forger les paquets ARP de façon lisible et pédagogique. Arrêt propre avec **restauration des caches** sur `Ctrl+C` (SIGINT).
+
+**b. Interception — réutilisation de `rnifler` (Rust) côté attaquant.**
+Le sniffer défensif, habituellement sur le broker, est lancé sur l'attaquant. Il décode en clair l'intégralité du trafic MQTT détourné, démontrant que **la position** (et non la simple présence sur le réseau) donne la visibilité.
+
+**c. Altération en transit du capteur — NetfilterQueue + scapy (`alter.py`).**
+Les paquets du flux relayé sont déroutés vers une file `NFQUEUE` ; le handler Python réécrit la valeur de température **en vol**, à **longueur de payload identique** (contrainte TCP), et recalcule les checksums.
+
+**d. Altération de l'actionneur — proxy TCP transparent (Python, `proxy.py`).**
+Pour s'affranchir de la contrainte de longueur, l'attaque passe à un **proxy applicatif** : une règle `REDIRECT` détourne la connexion de l'objet vers un listener local, qui récupère la destination d'origine via `SO_ORIGINAL_DST`, **termine la connexion TCP** et en ouvre une propre vers le broker. Chaque pile TCP gérant ses propres numéros de séquence, la **longueur du payload devient libre**. Le proxy réécrit la **commande** (`OFF → ON`) et **fige l'état** (`→ OFF`). Le **client-id légitime** (`actionneur1`) est réutilisé pour rester indétectable au niveau applicatif.
+
+**Langages.** Python (scapy, NetfilterQueue, sockets) pour l'offensif rapide et lisible ; Rust (`rnifler`) réutilisé pour le décodage MQTT.
+
+**Difficultés techniques traitées et documentées.**
+- Sur une distribution moderne, `net.ipv4.ip_forward=1` ne suffit pas : la chaîne `FORWARD` est en `policy drop` (firewalld + Docker) ; le relais doit être autorisé explicitement.
+- L'altération **en place** (NFQUEUE) est bornée par TCP à une **longueur de payload identique** ; cette limite est franchie par le **proxy transparent** (terminaison de connexion).
+- **TCP est un flux d'octets sans frontières de message** : les messages MQTT sont reconstitués via leur champ *remaining length*, avec un buffer par connexion (gestion de la coalescence et de la fragmentation).
+- La **télémétrie est événementielle** : l'actionneur ne publie son état que sur changement réel (`retain=1`) ; l'illusion durable repose sur le message **retenu** côté broker.
+
+## 5. Résultat & preuve
+
+| Média | Contenu démontré |
+|---|---|
+| `media/01-spoofing-launch` | `spoof.py` en cours : caches ARP du broker (`.182`) et de l'objet empoisonnés. |
+| `media/02-onpath-interception` | `rnifler` sur l'attaquant : **vide** sans MITM, **plein** avec MITM, trafic qui s'arrête à l'arrêt du spoof (causalité on-path). Décodage en clair des topics `labo/capteur1/temperature` et `/humidite`. |
+| `media/03-alteration-capteur` | Température réelle **`19.3` réécrite en `99.9`** en transit ; le broker enregistre la fausse valeur. |
+| `media/04-alteration-commande` | Commande **`OFF` transformée en `ON`** : la LED de l'actionneur **s'allume contre la commande émise** (preuve physique). |
+| `media/05-supervision-aveuglee` | État **figé à `OFF`** : la LED passe au vert (bouton ou commande) tandis que la supervision affiche en permanence `OFF` — découplage total réalité/supervision. |
+
+Environnement : attaquant ThinkPad (Fedora, `wlp0s20f3`, `192.168.50.229`) ; capteur ESP32 `192.168.50.165` ; actionneur ESP32 `192.168.50.223` ; broker Mosquitto sur Raspberry Pi `192.168.50.182:1883`, MQTT en clair, sans authentification.
+
+**Restauration.** Le lab est remis dans son état initial après l'attaque (arrêt du proxy, retrait de la règle `REDIRECT`, arrêt du spoofing avec restauration des caches ARP, retrait de la règle `FORWARD`, `ip_forward=0`). Les vérifications confirment un retour au comportement nominal (une commande `OFF` éteint de nouveau l'actionneur). Procédure détaillée dans le `README`.
+
+## 6. Ce que ça démontre
+
+- **Être sur le réseau ≠ voir le trafic : il faut une position.** Un attaquant présent sur le même réseau ne voit pas le trafic échangé entre deux autres hôtes ; l'ARP spoofing lui vole cette visibilité en le plaçant de force sur le chemin.
+- **ARP n'a aucune authentification** : un cache ARP est écrasable par n'importe quel hôte du réseau, ce qui rend l'interception triviale sur un segment non protégé.
+- **L'interception est passive et invisible** au niveau applicatif ; **l'altération est active et crée une divergence observable** entre ce qu'un objet émet et ce qu'un autre reçoit.
+- **Le trafic en clair est manipulable en transit** : une température de capteur comme une commande d'actionneur peuvent être falsifiées sans que les parties légitimes ne le détectent.
+- **Intégrité de la commande vs intégrité de la télémétrie** : altérer la commande (broker → objet) attaque l'**action** ; altérer l'état (objet → broker) attaque la **supervision**. Combinées, elles réalisent un **découplage total entre la réalité physique et la supervision** — l'objet agit à l'insu de l'opérateur tout en lui rapportant un état falsifié (modèle d'attaque sur les systèmes industriels, type Stuxnet).
+- **La sécurité périmétrique ne suffit pas** : une fois l'attaquant sur le réseau, l'absence de chiffrement et d'authentification des messages rend l'ensemble du bus MQTT manipulable.
+
+## 7. Lien vers la remédiation IAM (mois 5)
+
+Cette attaque justifie directement le passage au **mTLS** prévu au mois 5. Le chiffrement et l'authentification mutuelle neutralisent le MITM à ses trois niveaux :
+
+- **Lecture impossible** : le trafic chiffré ne peut plus être décodé en transit (fin de l'interception).
+- **Altération impossible** : l'authenticité et l'intégrité des messages empêchent toute réécriture en vol (fin de l'altération NFQUEUE).
+- **Terminaison impossible** : sans certificat valide signé par la CA, le proxy ne peut plus se faire passer pour le broker ni pour l'objet (fin du proxy transparent).
+
+La chaîne IAM complète (CA, certificats par objet, jetons courts, révocation automatique déclenchée par l'IDS du mois 4) transforme un réseau où « être au milieu suffit » en un réseau zero-trust où chaque message est authentifié.
+
+## 8. Statut portfolio
+
+**Intégré** au projet `sec-lab-iot` — ce volet n'a de sens que dans le contexte du lab (il réutilise `rnifler`, s'appuie sur l'entrée WiFi et prépare la remédiation IAM). Non autonome.

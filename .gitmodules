@@ -1,0 +1,3 @@
+[submodule "reverse/esp32_image_parser_samyk"]
+	path = reverse/esp32_image_parser_samyk
+	url = https://github.com/samyk/esp32_image_parser

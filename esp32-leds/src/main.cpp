@@ -27,9 +27,12 @@
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
+
+const int BUTTON_PIN = 25;
 const int GREEN_LED_PIN = 26;
-const int RED_LED_PIN = 25;
-const int BUTTON_PIN = 27;
+const int RED_LED_PIN = 27;
+
+// const char *FLAG = "Flag-{F4k3_P4ssw0rd}";
 
 const uint16_t MQTT_PORT = 1883;                         // MQTT non chiffre
 const char *MQTT_CLIENT_ID = "actionneur1";              // DOIT etre unique par objet
@@ -296,3 +299,8 @@ void loop()
   mqtt.loop();             // recoit les commandes (appelle onMqttMessage) + keepalive
   publishStateIfPending(); // publie l'etat s'il a change
 }
+
+// void function()
+// {
+//   Serial.printf("Congratulation, you found the flag: %s", FLAG);
+// }

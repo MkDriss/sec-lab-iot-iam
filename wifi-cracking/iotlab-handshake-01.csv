@@ -1,0 +1,7 @@
+
+BSSID, First time seen, Last time seen, channel, Speed, Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, ID-length, ESSID, Key
+96:83:C4:96:A7:13, 2026-11-09 11:59:28, 2026-11-09 12:00:03,  1, 270, WPA2, CCMP, PSK, -17,      339,       48,   0.  0.  0.  0,   7, IoT-Lab, 
+
+Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs
+70:4B:CA:03:7D:74, 2026-11-09 11:59:28, 2026-11-09 12:00:02, -50,       71, 96:83:C4:96:A7:13,
+
